@@ -79,7 +79,6 @@ class QAgent
   end
 
   def notify_result!(state, score)
-
     dscore = score - q.last_score
     q.update_policy!(dscore, state)
     q.last_score = score
@@ -150,7 +149,8 @@ class TableQ
   end
 end
 
-class Observer
+# thing that observes a 5-cell game
+class FiveGameObserver
   def observe(terminal, agent)
     arr = ['   ', '   ', '   ', '   ', '   ']
     puts "move #{agent.q.last_action} score: #{terminal.score}"
@@ -162,19 +162,19 @@ class Observer
   def show_policy!(agent)
     arr = []
     (0..4).each do |x|
-      if agent.q.q(x, :left) > agent.q.q(x, :right)
-        arr << ' < '
-      elsif agent.q.q(x, :left) < agent.q.q(x, :right)
-        arr << ' > '
-      else
-        arr << ' ? '
-      end
+      arr << if agent.q.q(x, :left) > agent.q.q(x, :right)
+               ' < '
+             elsif agent.q.q(x, :left) < agent.q.q(x, :right)
+               ' > '
+             else
+               ' ? '
+             end
     end
     p arr
   end
 end
 
 player = Player.new(FiveGame.new, QAgent.new)
-event = Event.new([player], [Observer.new])
+event = Event.new([player], [FiveGameObserver.new])
 
 event.run!

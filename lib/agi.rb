@@ -28,6 +28,8 @@ class Agent
   def choose_action(actions); end
 
   def notify_result!(state, score); end
+
+  def save_state; end
 end
 
 # a player with his terminal

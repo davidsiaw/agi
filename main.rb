@@ -257,47 +257,6 @@ class MazeGame < Terminal
   end
 end
 
-# Trains agents
-class AgentTrainer
-  attr_reader :observers
-
-  # Trainer observer
-  class Observer
-    attr_reader :count
-
-    def initialize
-      @count = 0
-    end
-
-    def observe(_terminal, _agent)
-      @count += 1
-    end
-  end
-
-  def initialize(agent_class, game_class, *game_args)
-    @agent_class = agent_class
-    @game_class = game_class
-    @game_args = game_args
-    @last_save = nil
-    @observers = []
-  end
-
-  def step
-    curr_agent = agent
-    observer = Observer.new
-    player = Player.new(@game_class.new(*@game_args), curr_agent)
-    event = Event.new([player], [observer, *observers])
-
-    event.run!
-    @last_save = curr_agent.save_state
-    p observer.count
-  end
-
-  def agent
-    @agent_class.new(@last_save)
-  end
-end
-
 class MazeObserver
   def observe(terminal, agent)
     show_pos!(terminal, agent)
@@ -368,6 +327,47 @@ class MazePolicyObserver
       puts '|'
     end
     puts '+----------------+'
+  end
+end
+
+# Trains agents
+class AgentTrainer
+  attr_reader :observers
+
+  # Trainer observer
+  class Observer
+    attr_reader :count
+
+    def initialize
+      @count = 0
+    end
+
+    def observe(_terminal, _agent)
+      @count += 1
+    end
+  end
+
+  def initialize(agent_class, game_class, *game_args)
+    @agent_class = agent_class
+    @game_class = game_class
+    @game_args = game_args
+    @last_save = nil
+    @observers = []
+  end
+
+  def step
+    curr_agent = agent
+    observer = Observer.new
+    player = Player.new(@game_class.new(*@game_args), curr_agent)
+    event = Event.new([player], [observer, *observers])
+
+    event.run!
+    @last_save = curr_agent.save_state
+    p observer.count
+  end
+
+  def agent
+    @agent_class.new(@last_save)
   end
 end
 

@@ -3,6 +3,7 @@
 require 'agi'
 require 'pry'
 require 'tty-cursor'
+require 'yaml'
 
 # random clicker agent
 class RandomAgent < Agent
@@ -60,9 +61,9 @@ end
 class TableQ
   attr_accessor :last_state, :last_action, :last_score, :available_actions
 
-  EPSILON = 0.99
-  LEARNING_RATE = 0.9
-  DISCOUNT_RATE = 0.9
+  EPSILON = 0.9
+  LEARNING_RATE = 0.001
+  DISCOUNT_RATE = 0.99
   LAMBDA = 0.9
 
   def initialize(q_saved)
@@ -132,7 +133,7 @@ class FiveGame < Terminal
 
   attr_reader :score
 
-  def initialize
+  def initialize(_num)
     @cells = CELLS
     @index = START_INDEX
     @score = 0
@@ -200,7 +201,7 @@ class MazeGame < Terminal
     '00000000'
   ].freeze
 
-  def initialize
+  def initialize(_num)
     MAZE.each_with_index do |row, y|
       row.split('').each_with_index do |cell, x|
         if cell == 'S'
@@ -256,6 +257,7 @@ class MazeGame < Terminal
     }
   end
 end
+
 
 class MazeObserver
   def observe(terminal, agent)
@@ -347,36 +349,205 @@ class AgentTrainer
     end
   end
 
-  def initialize(agent_class, game_class, *game_args)
+  def initialize(agent_class, game_class, count, *game_args)
+    @count = count.to_i
     @agent_class = agent_class
     @game_class = game_class
     @game_args = game_args
-    @last_save = nil
+    @last_saves = []
     @observers = []
   end
 
   def step
-    curr_agent = agent
     observer = Observer.new
-    player = Player.new(@game_class.new(*@game_args), curr_agent)
-    event = Event.new([player], [observer, *observers])
+    players = []
+    @count.times do |i|
+      curr_agent = @agent_class.new(@last_saves[i] || {})
+      curr_term = @game_class.new(i, *@game_args)
+      players << Player.new(curr_term, curr_agent)
+    end
 
+    event = Event.new(players, [observer, *observers])
     event.run!
-    @last_save = curr_agent.save_state
-    p observer.count
+
+    players.each_with_index do |player, i|
+      @last_saves[i] = player.agent.save_state
+    end
+
+    #p observer.count
   end
 
-  def agent
-    @agent_class.new(@last_save)
+  def save!(name)
+    File.write(name, { result: @last_saves }.to_yaml)
+  end
+
+  def load!(name)
+    @last_saves = YAML.load(File.read(name))[:result]
   end
 end
 
-t = AgentTrainer.new(QAgent, MazeGame)
-10.times { t.step }
-t.observers << MazePolicyObserver.new
-t.step
-t.observers.clear
-t.observers << MazeObserver.new
+# t = AgentTrainer.new(QAgent, MazeGame, 1)
+# 10.times { t.step }
+# t.observers << MazePolicyObserver.new
+# t.step
+# t.observers.clear
+# t.observers << MazeObserver.new
+# t.step
+
+class TicTacToeGamestate
+  attr_accessor :rows
+
+  def initialize
+    reset!
+  end
+
+  def reset!
+    @rows = [[nil, nil, nil],
+             [nil, nil, nil],
+             [nil, nil, nil]]
+  end
+
+  def paths
+    @paths ||= begin
+      result = []
+
+      a = []
+      b = []
+      3.times do |x|
+        a << [x, x]
+        b << [2 - x, x]
+      end
+      result << a
+      result << b
+
+      3.times do |x|
+        a = []
+        b = []
+        3.times do |y|
+          a << [x, y]
+          b << [y, x]
+        end
+        result << a
+        result << b
+      end
+
+      result
+    end
+  end
+
+  def victor
+    paths.each do |path|
+      m = nil
+      count = 0
+      path.each do |x, y|
+        c = @rows[y][x]
+        m ||= c
+        count += 1 if m == c && !m.nil?
+      end
+      return m if count == 3
+    end
+    nil
+  end
+end
+
+class TicTacToeGame < Terminal
+  def initialize(num, gamestate)
+    #0 is O and 1 is X
+    @num = num
+    @gamestate = gamestate
+  end
+
+  def actions
+    result = []
+    3.times do |x|
+      3.times do |y|
+        result << "#{x}#{y}" if @gamestate.rows[y][x].nil?
+      end
+    end
+    result
+  end
+
+  def state
+    s = ''
+    3.times do |x|
+      3.times do |y|
+        s += "#{x}#{y}=#{@gamestate.rows[y][x]}"
+      end
+    end
+    s
+  end
+
+  def ended?
+    !@gamestate.victor.nil? || actions.length.zero?
+  end
+
+  def score
+    return 1 if @gamestate.victor == @num
+    return -1 if @gamestate.victor == 1 - @num
+
+    0
+  end
+
+  def act!(action)
+    x = action[0].to_i
+    y = action[1].to_i
+
+    @gamestate.rows[y][x] = @num
+  end
+
+  def rows
+    @gamestate.rows
+  end
+
+  def victor
+    @gamestate.victor
+  end
+end
+
+class TicTacToeObserver
+  def t(x, y)
+    return ' X ' if @terminal.rows[y][x] == 1
+    return ' O ' if @terminal.rows[y][x] == 0
+
+    '   '
+  end
+
+  def victor
+    return 'X wins' if @terminal.victor == 1
+    return 'O wins' if @terminal.victor == 0
+
+    'no victor'
+  end
+
+  def observe(terminal, agent)
+    @terminal = terminal
+    puts "#{t(0, 0)}|#{t(1, 0)}|#{t(2, 0)}"
+    puts '---+---+---'
+    puts "#{t(0, 1)}|#{t(1, 1)}|#{t(2, 1)}"
+    puts '---+---+---'
+    puts "#{t(0, 2)}|#{t(1, 2)}|#{t(2, 2)}"
+    puts victor
+  end
+end
+
+state = TicTacToeGamestate.new
+game = TicTacToeGame.new(0, state)
+TicTacToeObserver.new.observe(game, nil)
+
+t = AgentTrainer.new(QAgent, TicTacToeGame, 2, state)
+
+# 1000.times do |x|
+#   puts "train #{x}"
+#   t.load!('tictactoe.yml')
+#   10000.times { state.reset!; t.step }
+#   t.save!('tictactoe.yml')
+# end
+
+#t.load!('tictactoe.yml')
+10000.times { state.reset!; t.step }
+t.save!('tictactoe.yml')
+t.observers << TicTacToeObserver.new
+state.reset!
 t.step
 
 # puts '---------------------------------------'

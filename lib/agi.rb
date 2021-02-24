@@ -2,6 +2,10 @@
 
 # base class for a terminal to control the game
 class Terminal
+  def initialize(num)
+    @num = num
+  end
+
   def actions
     []
   end
@@ -43,6 +47,8 @@ class Player
 
   def step!
     @agent.read_state!(@terminal.state)
+    return if @terminal.ended?
+
     action = @agent.choose_action(@terminal.actions)
     @terminal.act!(action)
   end
@@ -60,13 +66,13 @@ class Event
   end
 
   def step!
-    @players.each(&:step!)
-    @players.each(&:complete!)
-    @observers.each do |obs|
-      @players.each do |player|
+    @players.each do |player|
+      player.step!
+      @observers.each do |obs|
         obs.observe(player.terminal, player.agent)
       end
     end
+    @players.each(&:complete!)
   end
 
   def ended?
